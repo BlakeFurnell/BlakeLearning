@@ -1,0 +1,129 @@
+import streamlit as st
+import ollama
+import os
+
+# Page configuration
+st.set_page_config(
+    page_title="Local LLM Chat",
+    page_icon="🤖",
+    layout="wide"
+)
+
+# Initialize session state
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'current_model' not in st.session_state:
+    st.session_state.current_model = "llama3.2:3b"
+
+# Sidebar for controls
+with st.sidebar:
+    st.title("⚙️ Settings")
+    
+    # Get available models from Ollama
+    try:
+        models_response = ollama.list()
+        available_models = [model['name'] for model in models_response['models']]
+        
+        if available_models:
+            selected_model = st.selectbox(
+                "Select Model",
+                available_models,
+                index=available_models.index(st.session_state.current_model) 
+                      if st.session_state.current_model in available_models else 0
+            )
+            st.session_state.current_model = selected_model
+        else:
+            st.warning("No models found. Pull a model first!")
+            st.code("ollama pull llama3.2:3b")
+    except Exception as e:
+        st.error(f"Error connecting to Ollama: {e}")
+        st.info("Make sure Ollama is running!")
+    
+    st.divider()
+    
+    # Clear context button
+    if st.button("🗑️ Clear Chat History", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+    
+    st.divider()
+    
+    # File upload
+    st.subheader("📄 Upload Document")
+    uploaded_file = st.file_uploader(
+        "Upload a file to chat about",
+        type=['txt', 'md', 'py', 'json', 'csv'],
+        help="Upload text-based files"
+    )
+    
+    if uploaded_file:
+        # Read file content
+        file_content = uploaded_file.read().decode('utf-8')
+        st.success(f"Loaded: {uploaded_file.name}")
+        
+        if st.button("📝 Add to Context", use_container_width=True):
+            # Add file content to context
+            context_message = f"Here is the content of {uploaded_file.name}:\n\n{file_content}"
+            st.session_state.messages.append({
+                "role": "user",
+                "content": context_message
+            })
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"I've read the file {uploaded_file.name}. What would you like to know about it?"
+            })
+            st.rerun()
+    
+    st.divider()
+    
+    # Model info
+    st.subheader("ℹ️ Current Model")
+    st.code(st.session_state.current_model)
+    st.caption(f"Messages: {len(st.session_state.messages)}")
+
+# Main chat interface
+st.title("🤖 Local LLM Chat Interface")
+st.caption(f"Powered by Ollama • Model: {st.session_state.current_model}")
+
+# Display chat messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Chat input
+if prompt := st.chat_input("Type your message here..."):
+    # Add user message to chat
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Generate response
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        
+        try:
+            # Stream response from Ollama
+            with st.spinner("Thinking..."):
+                stream = ollama.chat(
+                    model=st.session_state.current_model,
+                    messages=[{"role": m["role"], "content": m["content"]} 
+                             for m in st.session_state.messages],
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if 'message' in chunk and 'content' in chunk['message']:
+                        full_response += chunk['message']['content']
+                        message_placeholder.markdown(full_response + "▌")
+                
+                message_placeholder.markdown(full_response)
+        
+        except Exception as e:
+            error_msg = f"Error: {str(e)}\n\nMake sure Ollama is running and the model is pulled."
+            message_placeholder.error(error_msg)
+            full_response = error_msg
+    
+    # Add assistant response to chat
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
