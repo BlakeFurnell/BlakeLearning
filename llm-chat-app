@@ -20,26 +20,23 @@ with st.sidebar:
     st.title("⚙️ Settings")
     
     # Get available models from Ollama
-    try:
-        models_response = ollama.list()
-        available_models = [model['name'] for model in models_response['models']]
-        
-        if available_models:
-            selected_model = st.selectbox(
-                "Select Model",
-                available_models,
-                index=available_models.index(st.session_state.current_model) 
-                      if st.session_state.current_model in available_models else 0
-            )
-            st.session_state.current_model = selected_model
-        else:
-            st.warning("No models found. Pull a model first!")
-            st.code("ollama pull llama3.2:3b")
-    except Exception as e:
-        st.error(f"Error connecting to Ollama: {e}")
-        st.info("Make sure Ollama is running!")
-    
-    st.divider()
+   def get_available_models():
+    response = ollama.list()
+
+    # New library (>=0.2): typed object with .models, each item has .model
+    if hasattr(response, 'models'):
+        names = []
+        for m in response.models:
+            if hasattr(m, 'model'):   names.append(m.model)
+            elif hasattr(m, 'name'):  names.append(m.name)
+            elif isinstance(m, dict): names.append(m.get('model') or m.get('name'))
+        return [n for n in names if n]
+
+    # Old library: plain dict with 'models' key
+    if isinstance(response, dict) and 'models' in response:
+        return [m.get('model') or m.get('name') for m in response['models']]
+
+    return []
     
     # Clear context button
     if st.button("🗑️ Clear Chat History", use_container_width=True):
