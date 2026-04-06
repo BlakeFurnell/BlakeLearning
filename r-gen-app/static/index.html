@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>R Codegen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+  <header id="topbar">
+    <span id="app-name">R Codegen</span>
+    <span id="health-indicator">
+      <span id="health-dot" class="dot dot--checking"></span>
+      <span id="health-label">Checking…</span>
+    </span>
+  </header>
+
+  <!-- Session expiry warning banner (shown after 45 min) -->
+  <div id="session-banner" class="session-banner" hidden>
+    Your session may have expired — re-upload your file if generation fails.
+  </div>
+
+  <!-- ── Main layout ─────────────────────────────────────────────────────── -->
+  <main id="layout">
+
+    <!-- LEFT: Data panel -->
+    <section id="panel-data" class="panel">
+      <div class="panel-header">Data</div>
+
+      <!-- Upload zone -->
+      <div id="upload-zone" role="button" tabindex="0" aria-label="Upload file">
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" aria-hidden="true" />
+        <div id="upload-idle">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            <polyline points="16 12 12 8 8 12" />
+            <line x1="12" y1="8" x2="12" y2="20" />
+          </svg>
+          <p class="upload-primary">Drop file here or <span class="link-like">click to browse</span></p>
+          <p class="upload-secondary">.csv · .xlsx · .xls</p>
+        </div>
+        <div id="upload-spinner" class="spinner" hidden>
+          <div class="spin-ring"></div>
+          <span>Parsing…</span>
+        </div>
+      </div>
+
+      <!-- File summary — hidden until upload succeeds -->
+      <div id="file-summary" hidden>
+        <div id="file-meta">
+          <span id="file-name-label" class="file-name"></span>
+          <span id="file-shape-label" class="file-shape"></span>
+        </div>
+
+        <div id="column-table-wrap">
+          <table id="column-table" aria-label="Column schema">
+            <thead>
+              <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th class="right">Null %</th>
+              </tr>
+            </thead>
+            <tbody id="column-tbody"></tbody>
+          </table>
+        </div>
+
+        <button id="clear-btn" class="btn btn--ghost">↺ Clear / new file</button>
+      </div>
+
+      <!-- Upload error -->
+      <p id="upload-error" class="inline-error" hidden></p>
+    </section>
+
+    <!-- RIGHT: Generate panel -->
+    <section id="panel-gen" class="panel">
+      <div class="panel-header">Generate R Code</div>
+
+      <div id="question-row">
+        <textarea
+          id="question-input"
+          rows="3"
+          placeholder="e.g. Show me null counts by column and flag rows where revenue is negative"
+          spellcheck="false"
+        ></textarea>
+        <button id="generate-btn" class="btn btn--primary">
+          Generate
+          <kbd>⌘↵</kbd>
+        </button>
+      </div>
+
+      <!-- Inline warning when no file loaded -->
+      <p id="no-file-warning" class="inline-warn" hidden>Upload a file first.</p>
+
+      <!-- Out-of-scope notice (shown instead of code output when LLM declines) -->
+      <p id="out-of-scope-notice" class="out-of-scope-notice" hidden>
+        That's outside what this tool handles — try asking about data cleaning or EDA.
+      </p>
+
+      <!-- Code output area -->
+      <div id="code-wrap">
+        <div id="code-toolbar">
+          <span id="gen-status" class="gen-status"></span>
+          <div id="code-actions">
+            <button id="copy-btn" class="btn btn--ghost btn--sm" hidden>Copy</button>
+            <button id="clear-code-btn" class="btn btn--ghost btn--sm">Clear</button>
+          </div>
+        </div>
+        <pre id="code-output" aria-live="polite" aria-label="Generated R code"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
