@@ -1,0 +1,4 @@
+Create a nixpacks.toml file in the project root that tells Railway to:
+- Use Python 3.11
+- Install dependencies from requirements.txt
+- Start the app with: uvicorn main:app --host 0.0.0.0 --port 8000
