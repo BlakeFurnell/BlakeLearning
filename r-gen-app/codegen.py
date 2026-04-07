@@ -25,10 +25,10 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 _API_KEY: str = os.environ.get("OLLAMA_API_KEY", "")
-_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", "https://ollama.com/api").rstrip("/")
 
 # The model tag to request from Ollama.  Override via environment if needed.
-_MODEL: str = os.environ.get("OLLAMA_MODEL", "llama3")
+_MODEL: str = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b-cloud")
 
 # Seconds to wait for the server to start returning tokens.  Streaming
 # responses can be slow to initiate on large models.
