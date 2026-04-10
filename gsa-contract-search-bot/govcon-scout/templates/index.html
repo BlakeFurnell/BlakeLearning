@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}GovCon Scout — Federal Contract Search{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="container">
+
+    <!-- ── Hero ── -->
+    <div class="hero">
+      <h1 class="hero-title">Find Your Next Federal Contract</h1>
+      <p class="hero-subtitle">
+        Enter your SAM.gov CAGE code to instantly surface active contract opportunities
+        matched to your NAICS codes, set-aside eligibility, and business certifications.
+      </p>
+
+      <div class="features">
+        <div class="feature-item">
+          <span class="icon">&#128269;</span>
+          SAM.gov Search
+        </div>
+        <div class="feature-item">
+          <span class="icon">&#129302;</span>
+          AI Fit Analysis
+        </div>
+        <div class="feature-item">
+          <span class="icon">&#127775;</span>
+          Set-Aside Matching
+        </div>
+        <div class="feature-item">
+          <span class="icon">&#128200;</span>
+          Scored &amp; Ranked
+        </div>
+      </div>
+
+      <!-- ── Step 1: Company Lookup ── -->
+      {% if error %}
+        <div class="error-banner">&#9888; {{ error }}</div>
+      {% endif %}
+
+      <div class="search-box">
+        <div class="search-box-title">&#9312; Look Up Your Company</div>
+        <form method="POST" action="{{ url_for('lookup') }}">
+          <div class="form-group">
+            <label class="form-label" for="cage">SAM.gov CAGE Code</label>
+            <input
+              class="form-control"
+              type="text"
+              id="cage"
+              name="cage"
+              placeholder="e.g. 1ABC2"
+              maxlength="5"
+              autocomplete="off"
+              spellcheck="false"
+              value="{{ request.form.get('cage', '') }}"
+            />
+          </div>
+          <button type="submit" class="btn btn-gold" style="width:100%;">
+            &#128269; Look Up Company
+          </button>
+        </form>
+      </div>
+
+      <!-- ── Step 2: Contract Search ── -->
+      <div class="advanced-section" id="search-section">
+        <div class="advanced-title">&#9313; Search for Contracts</div>
+        <p style="font-size:0.82rem; color:#8a9bb0; margin-bottom:1.25rem;">
+          Look up your company first, or enter a CAGE code directly to search opportunities.
+        </p>
+        <form method="POST" action="{{ url_for('search') }}">
+          <div class="form-group">
+            <label class="form-label" for="search-cage">CAGE Code</label>
+            <input
+              class="form-control"
+              type="text"
+              id="search-cage"
+              name="cage"
+              placeholder="e.g. 1ABC2"
+              maxlength="5"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="days_back">
+              Search Window: <span id="days-label">30</span> days back
+            </label>
+            <input
+              type="range"
+              id="days_back"
+              name="days_back"
+              min="7" max="60"
+              step="1"
+              value="30"
+              oninput="document.getElementById('days-label').textContent = this.value"
+            />
+            <div class="range-labels">
+              <span>7 days</span>
+              <span>14</span>
+              <span>30</span>
+              <span>60 days</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="include_analysis" name="include_analysis" value="1" />
+              <label for="include_analysis">
+                Run AI Fit Analysis <span style="color:#8a9bb0; font-size:0.8rem;">(slower &mdash; uses Ollama)</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-gold" style="width:100%;">
+            &#128202; Find Contracts
+          </button>
+        </form>
+      </div>
+
+    </div><!-- /hero -->
+  </div><!-- /container -->
+</div><!-- /page-content -->
+{% endblock %}

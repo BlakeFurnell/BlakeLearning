@@ -1,0 +1,20 @@
+{#
+  templates/detail.html
+
+  Full detail view for a single SAM.gov contract opportunity.
+  Displays raw opportunity fields (title, agency, NAICS, dates, attachments)
+  alongside the Ollama-generated AI summary and fit assessment panel.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Opportunity Detail — GovCon Scout</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <!-- Opportunity detail and AI summary panel will go here -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.company_name }} — GovCon Scout{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="container">
+
+    <!-- ── Profile Header ── -->
+    <div class="profile-header">
+      <div>
+        <div class="profile-name">{{ profile.company_name }}</div>
+        <div class="profile-uei">
+          CAGE: <span data-copy-cage="{{ profile.cage_code }}">{{ profile.cage_code }}</span>
+          {% if profile.uei %}
+            &nbsp;&bull;&nbsp; UEI: {{ profile.uei }}
+          {% endif %}
+        </div>
+      </div>
+      <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+        {% if profile.registration_status == "Active" %}
+          <span class="badge badge-green">&#10003; {{ profile.registration_status }}</span>
+        {% else %}
+          <span class="badge badge-red">&#9888; {{ profile.registration_status }}</span>
+        {% endif %}
+        <!-- Quick search using this CAGE code -->
+        <form method="POST" action="{{ url_for('search') }}" style="display:inline;">
+          <input type="hidden" name="cage" value="{{ profile.cage_code }}" />
+          <input type="hidden" name="days_back" value="30" />
+          <button type="submit" class="btn btn-gold">
+            &#128202; Search for Contracts
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="grid-3">
+
+      <!-- ── NAICS Codes ── -->
+      <div class="card" style="grid-column: span 2;">
+        <div class="card-header">
+          <span class="card-title">NAICS Codes</span>
+          {% if profile.primary_naics %}
+            <span class="badge badge-gold">Primary: {{ profile.primary_naics.naicsCode }}</span>
+          {% endif %}
+        </div>
+        {% if profile.naics_codes %}
+          <ul class="naics-list">
+            {% for n in profile.naics_codes %}
+              <li class="naics-item">
+                <span class="naics-code">{{ n.naicsCode }}</span>
+                <span class="naics-desc">{{ n.naicsDescription or "—" }}</span>
+                {% if n.isPrimary %}
+                  <span class="badge badge-gold" style="font-size:0.65rem;">Primary</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p style="color:#8a9bb0; font-size:0.9rem;">No NAICS codes on file.</p>
+        {% endif %}
+      </div>
+
+      <!-- ── Right Column ── -->
+      <div style="display:flex; flex-direction:column; gap:1.25rem;">
+
+        <!-- Set-Aside Eligibility -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Set-Aside Eligibility</span>
+          </div>
+          {% if profile.set_aside_eligibility %}
+            <div class="tag-list">
+              {% for code in profile.set_aside_eligibility %}
+                <span class="badge badge-blue">{{ code }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p style="color:#8a9bb0; font-size:0.85rem;">No set-aside codes identified.</p>
+          {% endif %}
+        </div>
+
+        <!-- Business Certifications -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Business Certifications</span>
+          </div>
+          {% if profile.business_types %}
+            <div class="tag-list">
+              {% for bt in profile.business_types %}
+                <span class="badge badge-muted">{{ bt }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p style="color:#8a9bb0; font-size:0.85rem;">None listed.</p>
+          {% endif %}
+        </div>
+
+      </div>
+    </div><!-- /grid -->
+
+    <hr class="section-divider" />
+
+    <!-- ── Search Options ── -->
+    <div class="card" style="max-width:540px; margin:0 auto;">
+      <div class="card-header">
+        <span class="card-title">Search for Opportunities</span>
+      </div>
+      <form method="POST" action="{{ url_for('search') }}">
+        <input type="hidden" name="cage" value="{{ profile.cage_code }}" />
+
+        <div class="form-group">
+          <label class="form-label" for="days_back">
+            Search Window: <span id="days-label">30</span> days back
+          </label>
+          <input
+            type="range"
+            id="days_back"
+            name="days_back"
+            min="7" max="60"
+            step="1"
+            value="30"
+            oninput="document.getElementById('days-label').textContent = this.value"
+          />
+          <div class="range-labels">
+            <span>7 days</span>
+            <span>14</span>
+            <span>30</span>
+            <span>60 days</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="include_analysis" name="include_analysis" value="1" />
+            <label for="include_analysis">
+              Run AI Fit Analysis
+              <span style="color:#8a9bb0; font-size:0.8rem;">(slower &mdash; uses Ollama)</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-gold" style="width:100%;">
+          &#128202; Find Contracts
+        </button>
+      </form>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /page-content -->
+{% endblock %}

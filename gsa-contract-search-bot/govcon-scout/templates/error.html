@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Error — GovCon Scout{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="container">
+    <div class="error-page">
+      <div class="error-code">&#9888;</div>
+      <div style="font-size:1.4rem; font-weight:700; color:#f0f4f8; margin:0.5rem 0;">Something went wrong</div>
+      <div class="error-msg">{{ error or "An unexpected error occurred. Please try again." }}</div>
+      <a href="{{ url_for('index') }}" class="btn btn-gold">&#8592; Back to Home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

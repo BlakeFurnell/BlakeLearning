@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Results for {{ profile.company_name }} — GovCon Scout{% endblock %}
+
+{% block content %}
+<div class="page-content">
+  <div class="container">
+
+    <!-- ── Error Banner ── -->
+    {% if error %}
+      <div class="error-banner">&#9888; {{ error }}</div>
+    {% endif %}
+
+    <!-- ── Company Summary Bar ── -->
+    <div class="profile-summary">
+      <div>
+        <div class="profile-summary-name">{{ profile.company_name }}</div>
+        <div class="profile-summary-meta">
+          CAGE: {{ profile.cage_code }}{% if profile.uei %} &bull; UEI: {{ profile.uei }}{% endif %}
+          {% if profile.primary_naics %}
+            &bull; Primary NAICS: {{ profile.primary_naics.naicsCode }}
+          {% endif %}
+          {% if profile.set_aside_eligibility %}
+            &bull; Set-Asides:
+            {% for code in profile.set_aside_eligibility %}
+              <span class="badge badge-blue" style="font-size:0.65rem;">{{ code }}</span>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+      <div style="display:flex; gap:0.6rem;">
+        <a href="{{ url_for('index') }}" class="btn btn-outline btn-sm">&#8592; New Search</a>
+        <form method="POST" action="{{ url_for('search') }}" style="display:inline;">
+          <input type="hidden" name="cage" value="{{ profile.cage_code }}" />
+          <input type="hidden" name="days_back" value="30" />
+          <input type="hidden" name="include_analysis" value="1" />
+          <button type="submit" class="btn btn-gold btn-sm">&#128260; Re-run with AI</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Stats Bar ── -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-value">{{ opportunities | length }}</span>
+        <span class="stat-label">Opportunities Found</span>
+      </div>
+      {% if analysis_ran and opportunities %}
+        {% set scored = opportunities | selectattr("fit_score", "defined") | list %}
+        {% if scored %}
+          {% set avg = (scored | sum(attribute="fit_score") / scored | length) | round(1) %}
+          <div class="stat-item">
+            <span class="stat-value">{{ avg }}</span>
+            <span class="stat-label">Avg Fit Score</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">{{ scored | selectattr("recommended_action", "equalto", "Apply") | list | length }}</span>
+            <span class="stat-label">Recommended: Apply</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">{{ scored | selectattr("fit_score", "ge", 7) | list | length }}</span>
+            <span class="stat-label">Strong / Good Fit</span>
+          </div>
+        {% endif %}
+      {% endif %}
+      <div class="stat-item" style="margin-left:auto;">
+        <span class="stat-value" style="font-size:0.85rem; color:#8a9bb0;">
+          {% if analysis_ran %}
+            <span class="badge badge-green">&#129302; AI Scored</span>
+          {% else %}
+            <span class="badge badge-muted">Unscored</span>
+          {% endif %}
+        </span>
+        <span class="stat-label">&nbsp;</span>
+      </div>
+    </div>
+
+    <!-- ── Filter Bar ── -->
+    {% if analysis_ran and opportunities %}
+      <div class="filter-bar">
+        <span class="filter-bar-label">Filter:</span>
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="Strong Fit">Strong Fit</button>
+        <button class="filter-btn" data-filter="Good Fit">Good Fit</button>
+        <button class="filter-btn" data-filter="Fair Fit">Fair Fit</button>
+        <button class="filter-btn" data-filter="Poor Fit">Poor Fit</button>
+        <span style="width:1px; background:#2e3d54; height:1rem; margin:0 0.25rem;"></span>
+        <button class="filter-btn" data-filter-action="Apply">Apply</button>
+        <button class="filter-btn" data-filter-action="Review Further">Review</button>
+        <button class="filter-btn" data-filter-action="Skip">Skip</button>
+      </div>
+    {% endif %}
+
+    <!-- ── Opportunity Cards ── -->
+    {% if opportunities %}
+      <div id="opp-list">
+        {% for opp in opportunities %}
+          {# Determine urgency: deadline within 7 days #}
+          {% set deadline_urgent = false %}
+          {% if opp.response_deadline %}
+            {# We'll handle deadline highlighting via JS; flag the element #}
+          {% endif %}
+
+          <div
+            class="opp-card"
+            data-fit-label="{{ opp.fit_label | default('') }}"
+            data-action="{{ opp.recommended_action | default('') }}"
+          >
+            <!-- Header row -->
+            <div class="opp-card-header">
+              <div class="opp-title">
+                <a href="{{ opp.url }}" target="_blank" rel="noopener">{{ opp.title or "Untitled Opportunity" }}</a>
+              </div>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; flex-shrink:0;">
+                {% if opp.set_aside_description %}
+                  <span class="badge badge-blue">{{ opp.set_aside_description }}</span>
+                {% endif %}
+                {% if opp.naics_code %}
+                  <span class="badge badge-gold">NAICS {{ opp.naics_code }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Meta row -->
+            <div class="opp-meta">
+              {% if opp.department %}
+                <span>&#127963; {{ opp.department.split('.')[0] if '.' in opp.department else opp.department }}</span>
+              {% endif %}
+              {% if opp.office %}
+                <span>&#128205; {{ opp.office }}</span>
+              {% endif %}
+              {% if opp.solicitation_number %}
+                <span style="font-family:monospace;">{{ opp.solicitation_number }}</span>
+              {% endif %}
+              {% if opp.posted_date %}
+                <span>Posted: {{ opp.posted_date }}</span>
+              {% endif %}
+              {% if opp.response_deadline %}
+                <span
+                  class="deadline-flag"
+                  data-deadline="{{ opp.response_deadline }}"
+                >
+                  Due: {{ opp.response_deadline }}
+                </span>
+              {% endif %}
+              {% if opp.estimated_value %}
+                <span class="value-tag">~{{ format_currency(opp.estimated_value) }}</span>
+              {% endif %}
+            </div>
+
+            <!-- AI Analysis section -->
+            {% if analysis_ran and opp.fit_score is defined %}
+              <hr class="opp-divider" />
+
+              <div class="fit-row">
+                <div class="fit-score-wrap">
+                  <span class="fit-score-num score-{{ opp.fit_score }}">{{ opp.fit_score }}</span>
+                  <div class="fit-bar-track">
+                    <div
+                      class="fit-bar-fill fill-{{ opp.fit_score }}"
+                      style="width: {{ opp.fit_score * 10 }}%;"
+                    ></div>
+                  </div>
+                </div>
+                <span class="badge
+                  {% if opp.fit_label == 'Strong Fit' %}badge-green
+                  {% elif opp.fit_label == 'Good Fit' %}badge-blue
+                  {% elif opp.fit_label == 'Fair Fit' %}badge-gold
+                  {% else %}badge-red
+                  {% endif %}
+                ">{{ opp.fit_label }}</span>
+              </div>
+
+              {% if opp.why_good_fit %}
+                <div class="fit-text-block" style="margin-bottom:0.5rem;">
+                  <strong>Why it fits:</strong> {{ opp.why_good_fit }}
+                </div>
+              {% endif %}
+              {% if opp.watch_outs %}
+                <div class="fit-text-block">
+                  <strong>Watch outs:</strong> {{ opp.watch_outs }}
+                </div>
+              {% endif %}
+
+              <div class="action-row">
+                {% if opp.recommended_action == "Apply" %}
+                  <a href="{{ opp.url }}" target="_blank" rel="noopener" class="btn btn-gold btn-sm">
+                    &#9654; Apply on SAM.gov
+                  </a>
+                {% elif opp.recommended_action == "Review Further" %}
+                  <a href="{{ opp.url }}" target="_blank" rel="noopener" class="btn btn-blue btn-sm">
+                    &#128065; Review on SAM.gov
+                  </a>
+                {% else %}
+                  <a href="{{ opp.url }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
+                    View on SAM.gov
+                  </a>
+                {% endif %}
+              </div>
+
+            {% else %}
+              <!-- No analysis yet -->
+              <div class="action-row">
+                <a href="{{ opp.url }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
+                  View on SAM.gov &#8599;
+                </a>
+                <form method="POST" action="{{ url_for('search') }}" style="display:inline;">
+                  <input type="hidden" name="cage" value="{{ profile.cage_code }}" />
+                  <input type="hidden" name="days_back" value="30" />
+                  <input type="hidden" name="include_analysis" value="1" />
+                  <button type="submit" class="btn btn-outline btn-sm" style="border-color:#3498db; color:#3498db;">
+                    &#129302; Run AI Analysis
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+
+          </div><!-- /opp-card -->
+        {% endfor %}
+      </div><!-- /opp-list -->
+
+    {% else %}
+      <div class="card" style="text-align:center; padding:3rem;">
+        <div style="font-size:2.5rem; margin-bottom:1rem;">&#128269;</div>
+        <div style="font-size:1.1rem; font-weight:700; margin-bottom:0.5rem;">No opportunities found</div>
+        <div style="color:#8a9bb0; font-size:0.9rem; margin-bottom:1.5rem;">
+          Try expanding your search window or check that your NAICS codes are current in SAM.gov.
+        </div>
+        <a href="{{ url_for('index') }}" class="btn btn-gold">&#8592; Start Over</a>
+      </div>
+    {% endif %}
+
+  </div><!-- /container -->
+</div><!-- /page-content -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── Filter bar logic ──
+  const filterBtns = document.querySelectorAll('.filter-btn');
+  const cards = document.querySelectorAll('.opp-card');
+
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const fitFilter    = btn.dataset.filter;
+      const actionFilter = btn.dataset.filterAction;
+
+      cards.forEach(card => {
+        const label  = card.dataset.fitLabel;
+        const action = card.dataset.action;
+
+        if (fitFilter === 'all' || fitFilter === undefined && actionFilter === undefined) {
+          card.classList.remove('hidden');
+        } else if (fitFilter && fitFilter !== 'all') {
+          card.classList.toggle('hidden', label !== fitFilter);
+        } else if (actionFilter) {
+          card.classList.toggle('hidden', action !== actionFilter);
+        }
+      });
+    });
+  });
+
+  // ── Deadline urgency highlight ──
+  document.querySelectorAll('.deadline-flag').forEach(el => {
+    const raw = el.dataset.deadline;
+    if (!raw) return;
+    const deadline = new Date(raw);
+    const now = new Date();
+    const diffDays = (deadline - now) / (1000 * 60 * 60 * 24);
+    if (diffDays >= 0 && diffDays <= 7) {
+      el.classList.add('deadline-urgent');
+      el.textContent = `Due: ${raw} ⚠`;
+    }
+  });
+</script>
+{% endblock %}
