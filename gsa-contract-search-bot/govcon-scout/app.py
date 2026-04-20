@@ -161,4 +161,5 @@ def not_found(_exc):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    # SECURITY FIX: was hardcoded debug=True, now reads from Config.DEBUG
+    app.run(host="0.0.0.0", port=8000, debug=Config.DEBUG)
