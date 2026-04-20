@@ -1,4 +1,4 @@
-"""
+﻿"""
 main.py
 
 FastAPI application entry point.
@@ -50,26 +50,29 @@ TEMP_DIR = Path("/tmp/r-codegen")
 # Accepted upload extensions (lower-case, with leading dot).
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
+# Maximum allowed upload size (50 MB).
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+# Session expiry (1 hour).
+SESSION_MAX_AGE_SECS = 60 * 60  # 1 hour
+
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
 
-# Read allowed origins from env; fall back to wildcard for local development.
+# Read allowed origins from env; fall back to localhost for local development.
 # In production set ALLOWED_ORIGINS=https://yourdomain.com in .env.
-_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-ALLOWED_ORIGINS: list[str] = (
-    [o.strip() for o in _raw_origins.split(",")]
-    if _raw_origins != "*"
-    else ["*"]
-)
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8000")
+ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",")]
 
 # ---------------------------------------------------------------------------
 # In-memory session store
 #
 # Each entry:
-#   session_id (str) → {
-#       "summary":   dict   — full parse_file() output (sent to LLM)
-#       "temp_path": str    — absolute path to the saved temp file
+#   session_id (str) -> {
+#       "summary":    dict   - full parse_file() output (sent to LLM)
+#       "temp_path":  str    - absolute path to the saved temp file
+#       "created_at": float  - unix timestamp for TTL eviction
 #   }
 #
 # See the production note at the top of the file before deploying.
@@ -98,17 +101,14 @@ async def startup() -> None:
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     _cleanup_old_temp_files()
 
-    # ── Startup diagnostics ────────────────────────────────────────────────
+    # -- Startup diagnostics --------------------------------------------------
     # Confirm env vars loaded and surface obvious misconfigurations early.
     import codegen as _cg
-    api_key_display = (
-        f"{_cg._API_KEY[:6]}…" if len(_cg._API_KEY) > 6 else ("(empty)" if not _cg._API_KEY else _cg._API_KEY)
-    )
     print(f"[startup] OLLAMA_BASE_URL : {_cg._BASE_URL}")
-    print(f"[startup] OLLAMA_API_KEY  : {api_key_display}")
+    print(f"[startup] OLLAMA_API_KEY  : {'configured' if _cg._API_KEY else 'missing'}")
     print(f"[startup] OLLAMA_MODEL    : {_cg._MODEL}")
     if "your-ollama" in _cg._BASE_URL or "your_" in _cg._API_KEY:
-        print("[startup] WARNING: .env still contains placeholder values — update OLLAMA_BASE_URL and OLLAMA_API_KEY")
+        print("[startup] WARNING: .env still contains placeholder values - update OLLAMA_BASE_URL and OLLAMA_API_KEY")
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +133,18 @@ def _cleanup_old_temp_files() -> None:
             path.unlink(missing_ok=True)
 
 
+def _evict_expired_sessions() -> None:
+    """Remove sessions older than SESSION_MAX_AGE_SECS and delete their temp files."""
+    cutoff = time.time() - SESSION_MAX_AGE_SECS
+    expired = [sid for sid, data in _sessions.items() if data.get("created_at", 0) < cutoff]
+    for sid in expired:
+        session = _sessions.pop(sid, None)
+        if session:
+            Path(session["temp_path"]).unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
-# Routes — defined before the static mount so FastAPI sees them first.
+# Routes - defined before the static mount so FastAPI sees them first.
 # ---------------------------------------------------------------------------
 
 @app.get("/health", tags=["meta"])
@@ -165,9 +175,12 @@ async def upload(file: UploadFile = File(...)) -> dict:
     422 before any data is written to disk.
 
     Returns a lightweight summary (shape + columns + filename) to the frontend.
-    The full summary — including sample rows, numeric stats, and categorical
-    value counts — is kept server-side and injected into the LLM prompt only.
+    The full summary - including sample rows, numeric stats, and categorical
+    value counts - is kept server-side and injected into the LLM prompt only.
     """
+    # Evict expired sessions before creating a new one.
+    _evict_expired_sessions()
+
     # --- Validate extension before touching disk ---
     original_name = file.filename or "upload"
     suffix = Path(original_name).suffix.lower()
@@ -180,6 +193,14 @@ async def upload(file: UploadFile = File(...)) -> dict:
             ),
         )
 
+    # --- Read and enforce size limit ---
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum allowed size is {MAX_UPLOAD_BYTES / 1024 / 1024:.0f} MB.",
+        )
+
     # --- Save to temp directory with a unique name so concurrent uploads
     #     don't collide.  We keep the original extension so pandas can detect
     #     the format without sniffing the content.
@@ -188,7 +209,7 @@ async def upload(file: UploadFile = File(...)) -> dict:
 
     try:
         with temp_path.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+            f.write(contents)
     finally:
         await file.close()
 
@@ -199,8 +220,6 @@ async def upload(file: UploadFile = File(...)) -> dict:
         # real name rather than the UUID-prefixed temp name.
         summary["filename"] = original_name
     except ValueError as exc:
-        # parse_file raises ValueError for unsupported types — shouldn't reach
-        # here because we validated above, but guard defensively.
         temp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
@@ -215,12 +234,10 @@ async def upload(file: UploadFile = File(...)) -> dict:
     _sessions[session_id] = {
         "summary": summary,
         "temp_path": str(temp_path),
+        "created_at": time.time(),
     }
 
     # --- Return lightweight summary to the frontend ---
-    # shape and columns are enough for the UI to render a schema preview.
-    # Heavier fields (sample, numeric_summary, categorical_summary,
-    # duplicate_rows) are intentionally withheld to keep the response small.
     return {
         "session_id": session_id,
         "summary": {
@@ -252,14 +269,14 @@ async def generate(body: GenerateRequest) -> StreamingResponse:
         )
 
     full_summary = session["summary"]
-    print(f"[generate] session found — filename={full_summary.get('filename')} question={body.question!r}")
+    print(f"[generate] session found - filename={full_summary.get('filename')} question={body.question!r}")
 
     async def _token_stream():
         """
         Wrap stream_r_code() so that any RuntimeError from codegen is
         converted to a plain-text error message in the stream rather than
         silently dropping the connection.  The frontend can detect a line
-        starting with "ERROR:" and surface it to the user.
+        starting with 'ERROR:' and surface it to the user.
         """
         chunk_count = 0
         try:
@@ -273,9 +290,9 @@ async def generate(body: GenerateRequest) -> StreamingResponse:
             yield f"\n# ERROR: {exc}\n"
         except Exception as exc:
             print(f"[generate] unexpected error: {type(exc).__name__}: {exc}")
-            yield f"\n# ERROR: unexpected server error — check logs\n"
+            yield f"\n# ERROR: unexpected server error - check logs\n"
         finally:
-            print(f"[generate] stream complete — {chunk_count} chunks yielded")
+            print(f"[generate] stream complete - {chunk_count} chunks yielded")
 
     return StreamingResponse(_token_stream(), media_type="text/plain")
 
@@ -289,7 +306,7 @@ async def delete_session(session_id: str) -> dict:
     """
     Remove the session from memory and delete the associated temp file.
 
-    Safe to call multiple times — missing sessions and missing files are
+    Safe to call multiple times - missing sessions and missing files are
     both treated as already-clean, not as errors.
     """
     session = _sessions.pop(session_id, None)
@@ -304,7 +321,7 @@ async def delete_session(session_id: str) -> dict:
 # Static frontend
 #
 # Mounted last so the explicit routes above take priority.  StaticFiles with
-# html=True causes /  to serve index.html automatically.
+# html=True causes / to serve index.html automatically.
 # ---------------------------------------------------------------------------
 
 app.mount("/static", StaticFiles(directory="static"), name="static-assets")
